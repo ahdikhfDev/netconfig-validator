@@ -1,0 +1,19 @@
+# MikroTik Configuration Example
+
+# Router-1 (PE-2)
+/interface bridge add name=loopback protocol-mode=none
+/ip address add address=152.100.13.2/30 interface=ether2
+/ip address add address=152.100.13.34/30 interface=ether3
+/routing ospf instance set [find name=default] router-id=152.100.13.2
+/routing ospf area add name=backbone area-id=0.0.0.0
+
+# Router-2 (PE-3)
+/ip address add address=152.100.13.2/30 interface=ether2
+/ip address add address=152.100.13.66/30 interface=ether3
+/routing bgp instance set [find name=default] as=65001 router-id=152.100.13.66
+
+# Host-A
+auto eth0
+iface eth0 inet static
+address 192.168.1.2/24
+gateway 192.168.1.1
