@@ -12,21 +12,29 @@ export function formatResponse(devices, links, errors) {
   }
 
   // Strip rawConfig from response to keep it lean
-  const devicesClean = devices.map((d) => ({
-    id: d.id,
-    name: d.name,
-    vendorType: d.vendorType,
-    loopback: d.loopback,
-    interfaces: d.interfaces.map((iface) => ({
-      id: iface.id,
-      name: iface.name,
-      ip: iface.ip,
-      prefixLength: iface.prefixLength,
-      networkAddr: iface.networkAddr,
-      role: iface.role,
-    })),
-    parseWarnings: d.parseWarnings,
-  }));
+  const devicesClean = devices.map((d) => {
+    const obj = {
+      id: d.id,
+      name: d.name,
+      vendorType: d.vendorType,
+      loopback: d.loopback,
+      interfaces: d.interfaces.map((iface) => ({
+        id: iface.id,
+        name: iface.name,
+        ip: iface.ip,
+        prefixLength: iface.prefixLength,
+        networkAddr: iface.networkAddr,
+        role: iface.role,
+      })),
+      parseWarnings: d.parseWarnings,
+      protocols: d.protocols || [],
+    };
+    // Include routing config if present (Fase 2)
+    if (d.routingConfig) {
+      obj.routingConfig = d.routingConfig;
+    }
+    return obj;
+  });
 
   return {
     devices: devicesClean,

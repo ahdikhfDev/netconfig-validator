@@ -4,6 +4,17 @@ export default function ExportButton({ errors, devices }) {
     md += `**Generated:** ${new Date().toISOString()}\n`;
     md += `**Devices:** ${devices.length}\n\n`;
 
+    // Device summary with protocols
+    md += `## Devices\n\n`;
+    md += `| Name | Type | Protocols | Loopback |\n`;
+    md += `|------|------|-----------|----------|\n`;
+    for (const dev of devices) {
+      const prots = (dev.protocols || []).join(', ') || '—';
+      const lo = dev.loopback || '—';
+      md += `| ${dev.name} | ${dev.vendorType} | ${prots} | ${lo} |\n`;
+    }
+    md += '\n';
+
     if (errors.length === 0) {
       md += `✅ No issues found.\n`;
     } else {
@@ -23,6 +34,14 @@ export default function ExportButton({ errors, devices }) {
     let txt = `NetSim Lite — Validation Report\n`;
     txt += `Generated: ${new Date().toISOString()}\n`;
     txt += `Devices: ${devices.length}\n`;
+    txt += `${'='.repeat(50)}\n\n`;
+
+    for (const dev of devices) {
+      txt += `Device: ${dev.name} (${dev.vendorType})\n`;
+      txt += `  Protocols: ${(dev.protocols || []).join(', ') || 'none'}\n`;
+      txt += `  Loopback: ${dev.loopback || '—'}\n\n`;
+    }
+
     txt += `${'='.repeat(50)}\n\n`;
 
     if (errors.length === 0) {

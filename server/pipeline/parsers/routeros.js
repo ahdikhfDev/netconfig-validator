@@ -1,6 +1,11 @@
 /**
- * routeros.js — Parse RouterOS config block into normalized interfaces.
+ * routeros.js — Parse RouterOS config block into normalized interfaces + routing config.
  */
+
+import { parseOSPF } from './routing/ospf.js';
+import { parseBGP } from './routing/bgp.js';
+import { parseMPLS } from './routing/mpls.js';
+import { parseVPLS } from './routing/vpls.js';
 
 const IP_RE = /^\/ip\s+address\s+add\s+.*address=([0-9./]+).*interface=(\S+)/m;
 const IFACE_RE = /^\/interface\s+(?:bridge|ethernet|vlan|wireless|bonding)\s+add\s+.*name=(\S+)/gm;
@@ -43,7 +48,22 @@ export function parseRouterOS(text) {
     }
   }
 
-  return { interfaces, parseWarnings: warnings, loopback };
+  // Parse routing protocol sections
+  const routing = {
+    ospf: parseOSPF(text),
+    bgp: parseBGP(text),
+    mpls: parseMPLS(text),
+    vpls: parseVPLS(text),
+  };
+
+  // Determine which protocols are active
+  const protocols = [];
+  if (routing.ospf.areas.length > 0 || routing.ospf.interfaces.length > 0) protocols.push('ospf');
+  if (routing.bgp.instances.length > 0 || routing.bgp.peers.length > 0) protocols.push('bgp');
+  if (routing.mpls.ldpInterfaces.length > 0) protocols.push('mpls');
+  if (routing.vpls.vplsInterfaces.length > 0) protocols.push('vpls');
+
+  return { interfaces, parseWarnings: warnings, loopback, routing, protocols };
 }
 
 function computeNetwork(ip, prefix) {

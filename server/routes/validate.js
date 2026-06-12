@@ -34,13 +34,15 @@ validateRouter.post('/validate', (req, res) => {
         interfaces: parsed.interfaces || [],
         parseWarnings: parsed.parseWarnings || [],
         loopback: parsed.loopback || null,
+        routingConfig: parsed.routing || null,
+        protocols: parsed.protocols || [],
       };
     });
 
     // 3. Build topology graph
     const links = buildGraph(devices);
 
-    // 4. Run validation rules
+    // 4. Run validation rules (Phase 1 + Phase 2 routing rules)
     const errors = runAllRules(devices, links);
 
     // 5. Format response
@@ -53,7 +55,7 @@ validateRouter.post('/validate', (req, res) => {
 });
 
 function detectVendor(text) {
-  if (/^\/interface\b|^\/ip\b|^\/routing\b|^\/system\b/m.test(text)) return 'routeros';
+  if (/^\/interface\b|^\/ip\b|^\/routing\b|^\/mpls\b|^\/system\b/m.test(text)) return 'routeros';
   if (/^auto\s|^iface\s|^source\s/m.test(text)) return 'linux_host';
   return 'unknown';
 }

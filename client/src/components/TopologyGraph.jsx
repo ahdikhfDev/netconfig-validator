@@ -13,8 +13,65 @@ const ERROR_COLOR = '#ef4444';
 const WARN_COLOR = '#f59e0b';
 const OK_COLOR = '#22c55e';
 
+const PROTOCOL_COLORS = {
+  ospf: { bg: '#1e3a5f', text: '#60a5fa' },
+  bgp: { bg: '#3b1f3b', text: '#c084fc' },
+  mpls: { bg: '#1f3b2f', text: '#34d399' },
+  vpls: { bg: '#3b2f1f', text: '#fbbf24' },
+};
+
+// Custom node component
+function DeviceNode({ data }) {
+  return (
+    <div
+      className="device-node"
+      style={{
+        background: data.hasError ? '#3b0f0f' : '#1e293b',
+        color: '#e2e8f0',
+        border: `2px solid ${data.hasError ? ERROR_COLOR : '#334155'}`,
+        borderRadius: 8,
+        padding: '10px 16px 8px',
+        fontSize: 12,
+        fontWeight: 600,
+        minWidth: 130,
+        textAlign: 'center',
+      }}
+    >
+      <div>{data.label}</div>
+      {data.protocols && data.protocols.length > 0 && (
+        <div style={{ display: 'flex', gap: 4, justifyContent: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+          {data.protocols.map((p) => {
+            const colors = PROTOCOL_COLORS[p.toLowerCase()] || { bg: '#374151', text: '#94a3b8' };
+            return (
+              <span
+                key={p}
+                style={{
+                  background: colors.bg,
+                  color: colors.text,
+                  fontSize: 9,
+                  fontWeight: 700,
+                  padding: '1px 6px',
+                  borderRadius: 4,
+                  letterSpacing: '0.5px',
+                  textTransform: 'uppercase',
+                }}
+              >
+                {p}
+              </span>
+            );
+          })}
+        </div>
+      )}
+      {data.loopback && (
+        <div style={{ fontSize: 9, color: '#64748b', marginTop: 2 }}>lo: {data.loopback}</div>
+      )}
+    </div>
+  );
+}
+
+const nodeTypes = { deviceNode: DeviceNode };
+
 export default function TopologyGraph({ devices, links, errors, selectedError }) {
-  // Compute which device IDs and subnet are "selected"
   const selectedDeviceIds = useMemo(() => {
     if (!selectedError) return new Set();
     return new Set(selectedError.relatedDeviceIds || []);
@@ -32,7 +89,7 @@ export default function TopologyGraph({ devices, links, errors, selectedError })
       const angle = (2 * Math.PI * i) / devices.length;
       return {
         id: dev.id,
-        type: 'default',
+        type: 'deviceNode',
         position: {
           x: 400 + Math.cos(angle) * 250,
           y: 300 + Math.sin(angle) * 250,
@@ -41,24 +98,15 @@ export default function TopologyGraph({ devices, links, errors, selectedError })
           label: dev.name,
           vendorType: dev.vendorType,
           loopback: dev.loopback,
-        },
-        style: {
-          background: hasError ? '#3b0f0f' : '#1e293b',
-          color: '#e2e8f0',
-          border: `2px solid ${hasError ? ERROR_COLOR : '#334155'}`,
-          borderRadius: 8,
-          padding: '10px 16px',
-          fontSize: 12,
-          fontWeight: 600,
-          minWidth: 120,
-          textAlign: 'center',
+          protocols: dev.protocols || [],
+          hasError,
         },
       };
     });
   }, [devices, selectedDeviceIds]);
 
   const edgeList = useMemo(() => {
-    return links.map((link, i) => {
+    return links.map((link) => {
       const hasError = selectedLinkSubnets.has(link.subnet);
       const isComplete = link.interfaceBId;
       return {
@@ -82,7 +130,6 @@ export default function TopologyGraph({ devices, links, errors, selectedError })
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState(nodes);
   const [flowEdges, setFlowEdges, onEdgesChange] = useEdgesState(edgeList);
 
-  // Update nodes/edges when data changes
   useMemo(() => {
     setFlowNodes(nodes);
     setFlowEdges(edgeList);
@@ -94,6 +141,7 @@ export default function TopologyGraph({ devices, links, errors, selectedError })
       edges={flowEdges}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
+      nodeTypes={nodeTypes}
       fitView
       attributionPosition="bottom-left"
       className="bg-slate-900"
@@ -101,7 +149,7 @@ export default function TopologyGraph({ devices, links, errors, selectedError })
       <Background color="#1e293b" gap={20} />
       <Controls className="bg-slate-800 border-slate-700 [&_button]:text-slate-300" />
       <MiniMap
-        nodeColor={(n) => n.style?.background || '#1e293b'}
+        nodeColor={(n) => n.data?.hasError ? '#3b0f0f' : '#1e293b'}
         maskColor="rgba(15, 23, 42, 0.7)"
         className="!bg-slate-800 border border-slate-700"
       />
