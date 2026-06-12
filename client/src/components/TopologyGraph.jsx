@@ -1,13 +1,13 @@
 import { useMemo, useEffect } from 'react';
-import ReactFlow, {
+import {
   Background,
   Controls,
   MiniMap,
   MarkerType,
+  ReactFlow,
   useNodesState,
   useEdgesState,
-  BaseEdge,
-  getBezierPath,
+  getSmoothStepPath,
   EdgeLabelRenderer,
   useReactFlow,
 } from 'reactflow';
@@ -19,7 +19,7 @@ const COLORS = {
   error:  '#ef4444',
   warn:   '#f59e0b',
   ok:     '#22c55e',
-  linkOk: '#475569',
+  linkOk: '#94a3b8',   // brighter for dark bg
   bg:     '#0f172a',
   card:   '#1e293b',
   text:   '#e2e8f0',
@@ -138,15 +138,17 @@ function edgeColor(hasError, link, deviceProtocols, index) {
 }
 
 // ─── Custom Edge ─────────────────────────────────────
-// ReactFlow 11.x passes path coordinates as direct props (not data.__rfProps)
-function NetEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data = {} }) {
+// ReactFlow 11.x: path coords as direct props (not data.__rfProps)
+// smoothstep = cleaner network-diagram style, no bezier curves
+function NetEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data = {}, markerEnd }) {
   const color = data?.color || COLORS.linkOk;
-  const sw = data?.hasError ? 3.5 : 2.5;
+  const sw = data?.hasError ? 4 : 3;  // thicker for better visibility
   const hasError = data?.hasError;
 
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX, sourceY, sourcePosition,
     targetX, targetY, targetPosition,
+    borderRadius: 12,
   });
 
   return (
@@ -169,6 +171,7 @@ function NetEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targe
         strokeWidth={sw}
         strokeLinecap="round"
         strokeDasharray={data?.dash || 'none'}
+        markerEnd={markerEnd}
         className={hasError ? 'animate-pulse' : ''}
       />
       {/* Subnet label */}
@@ -454,9 +457,13 @@ export default function TopologyGraph({ devices, links, errors, selectedError })
 
   // Build React Flow edges
   const baseEdges = useMemo(() => {
-    return links.map((link, idx) => {
+    return links
+      // Skip underpopulated links (no deviceBId) — avoid self-loop bugs
+      .filter((link) => link.deviceBId && link.interfaceBId)
+      .map((link, idx) => {
       const hasError = selectedLinkIds.has(link.id);
       const color = edgeColor(hasError, link, deviceProtocols, idx);
+      const markerEnd = { type: MarkerType.ArrowClosed, color };
 
       // Derive protocol label for edge badge
       let protoLabel = null;
@@ -483,20 +490,20 @@ export default function TopologyGraph({ devices, links, errors, selectedError })
       return {
         id: link.id,
         source: link.deviceAId,
-        target: link.deviceBId || link.deviceAId,
+        target: link.deviceBId,
         type: 'netEdge',
         animated: hasError,
-        style: { stroke: color, strokeWidth: hasError ? 3.5 : 2.5 },
+        markerEnd,
+        style: { stroke: color, strokeWidth: hasError ? 4 : 3 },
         data: {
           subnet: link.subnet,
           color,
           hasError,
           protoLabel,
-          dash: link.interfaceBId ? 'none' : '5 5',
           ifaceA,
           ifaceB,
           srcDevice: deviceNameMap[link.deviceAId] || link.deviceAId,
-          tgtDevice: deviceNameMap[link.deviceBId] || link.deviceBId || link.deviceAId,
+          tgtDevice: deviceNameMap[link.deviceBId] || link.deviceBId,
         },
       };
     });

@@ -1,5 +1,12 @@
 /**
  * routeros.js — Parse RouterOS config block into normalized interfaces + routing config.
+ * Handles both inline commands and continuation-line format (RouterOS v7+).
+ *
+ * Example continuation format:
+ *   /ip address
+ *   add address=10.0.0.1/32 interface=lo
+ *   add address=10.0.0.2/30 interface=ether1
+ *   → each "add" line is matched individually.
  */
 
 import { parseOSPF } from './routing/ospf.js';
@@ -7,45 +14,40 @@ import { parseBGP } from './routing/bgp.js';
 import { parseMPLS } from './routing/mpls.js';
 import { parseVPLS } from './routing/vpls.js';
 
-const IP_RE = /^\/ip\s+address\s+add\s+.*address=([0-9./]+).*interface=(\S+)/m;
-const IFACE_RE = /^\/interface\s+(?:bridge|ethernet|vlan|wireless|bonding)\s+add\s+.*name=(\S+)/gm;
-const LO_RE = /^\/ip\s+address\s+add\s+.*address=([0-9./]+).*interface=lo\b/m;
-
 export function parseRouterOS(text) {
   const interfaces = [];
   const warnings = [];
   let loopback = null;
 
-  // Detect loopback
-  const loMatch = text.match(LO_RE);
+  // Detect loopback — matches both inline and continuation formats
+  // Inline:      /ip address add address=10.0.0.1/32 interface=lo
+  // Continuation: add address=10.0.0.1/32 interface=lo
+  const loMatch = text.match(/^\s*(?:\/ip\s+address\s+)?add\s+.*address=([0-9./]+).*\binterface=lo\b/m);
   if (loMatch) {
     loopback = loMatch[1];
   }
 
-  // Parse IP addresses
-  const ipPattern = /^\/ip\s+address\s+add\s+(.*)$/gm;
+  // Parse IP addresses — matches both inline and continuation formats
+  // Inline:      /ip address add address=10.0.0.1/32 interface=lo
+  // Continuation: add address=10.0.0.1/32 interface=ether1
+  const ipPattern = /^\s*(?:\/ip\s+address\s+)?add\s+.*address=([0-9.]+)\/(\d+).*\binterface=(\S+)/gm;
   let match;
   while ((match = ipPattern.exec(text)) !== null) {
-    const params = match[1];
-    const addr = params.match(/address=([0-9.]+)\/(\d+)/);
-    const iface = params.match(/interface=(\S+)/);
-    if (addr && iface) {
-      const ip = addr[1];
-      const prefix = parseInt(addr[2], 10);
-      const ifName = iface[1];
-      if (ifName === 'lo') continue; // handled as loopback
+    const ip = match[1];
+    const prefix = parseInt(match[2], 10);
+    const ifName = match[3];
+    if (ifName === 'lo') continue; // handled as loopback
 
-      interfaces.push({
-        id: `${ifName}-${ip}`,
-        name: ifName,
-        ip,
-        prefixLength: prefix,
-        networkAddr: computeNetwork(ip, prefix),
-        broadcastAddr: computeBroadcast(ip, prefix),
-        gateway: null,
-        role: ifName.startsWith('ether') ? 'wan' : ifName.startsWith('bridge') ? 'lan' : 'unknown',
-      });
-    }
+    interfaces.push({
+      id: `${ifName}-${ip}`,
+      name: ifName,
+      ip,
+      prefixLength: prefix,
+      networkAddr: computeNetwork(ip, prefix),
+      broadcastAddr: computeBroadcast(ip, prefix),
+      gateway: null,
+      role: ifName.startsWith('ether') ? 'wan' : ifName.startsWith('bridge') ? 'lan' : 'unknown',
+    });
   }
 
   // Parse routing protocol sections

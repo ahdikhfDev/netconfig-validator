@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { ReactFlowProvider } from 'reactflow';
 import ConfigInput from './components/ConfigInput';
 import TopologyGraph from './components/TopologyGraph';
 import ErrorPanel from './components/ErrorPanel';
@@ -52,12 +53,14 @@ export default function App() {
         {/* Center: Graph */}
         <div className="flex-1 relative">
           {data ? (
-            <TopologyGraph
-              devices={data.devices}
-              links={data.links}
-              errors={data.errors}
-              selectedError={selectedError}
-            />
+            <ReactFlowProvider>
+              <TopologyGraph
+                devices={data.devices}
+                links={data.links}
+                errors={data.errors}
+                selectedError={selectedError}
+              />
+            </ReactFlowProvider>
           ) : (
             <div className="absolute inset-0 flex items-center justify-center text-slate-600">
               <div className="text-center space-y-2">

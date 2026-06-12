@@ -27,13 +27,16 @@ export function parseBGP(text) {
     });
   }
 
-  // /routing bgp peer add name=peer1 remote-address=10.10.13.4 remote-as=77133
-  const peerPattern = /^\/routing\s+bgp\s+peer\s+add\s+(.*)$/gm;
+  // /routing bgp peer add name=peer1 remote-address=10.10.13.4 remote-as=77133   (v6)
+  // /routing bgp connection add name=to-PE2 remote.address=10.10.13.5 remote.as=77133  (v7+)
+  const peerPattern = /^\/routing\s+bgp\s+(?:peer|connection)\s+add\s+(.*)$/gm;
   while ((match = peerPattern.exec(text)) !== null) {
     const params = match[1];
     const name = params.match(/name=(\S+)/);
-    const remoteAddress = params.match(/remote-address=([0-9.]+)/);
-    const remoteAs = params.match(/remote-as=(\d+)/);
+    // v7+ uses remote.address, v6 uses remote-address
+    const remoteAddress = params.match(/remote[-.]address=([0-9.]+)/);
+    // v7+ uses remote.as, v6 uses remote-as
+    const remoteAs = params.match(/remote[-.]as=(\d+)/);
     peers.push({
       name: name ? name[1] : 'unnamed',
       remoteAddress: remoteAddress ? remoteAddress[1] : null,
