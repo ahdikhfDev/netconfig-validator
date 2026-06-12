@@ -1,0 +1,500 @@
+==================================================================
+PROJECT PLANNING DOCUMENT
+NetConfig Validator & Visualizer (codename: "NetSim Lite")
+Versi: 1.0
+Tanggal: 13 Juni 2026
+Author: Thirty (ahdikhfDev)
+==================================================================
+
+
+==================================================================
+1. PRODUCT REQUIREMENTS DOCUMENT (PRD)
+==================================================================
+
+1.1 BACKGROUND / LATAR BELAKANG
+------------------------------------------------------------
+Mahasiswa jaringan (termasuk pembuat) sering mengerjakan tugas/UAS
+berupa konfigurasi network (RouterOS, host /etc/network/interfaces,
+dll) yang harus saling terhubung sesuai topology tertentu. Saat ini,
+validasi benar/salahnya konfigurasi (IP conflict, subnet salah,
+gateway tidak match, dll) dilakukan manual atau harus disimulasikan
+penuh di tools berat seperti Cisco Packet Tracer / GNS3 / VirtualBox.
+
+Dibutuhkan tools ringan berbasis web: user paste config (text),
+sistem otomatis parsing -> membangun graph topology -> validasi
+logika konfigurasi -> menampilkan hasil secara visual (graph +
+list error).
+
+
+1.2 GOALS
+------------------------------------------------------------
+- Memungkinkan user paste banyak config sekaligus (multi-device)
+- Otomatis deteksi topology (siapa terhubung ke siapa) berdasarkan
+  kecocokan subnet antar interface
+- Deteksi error konfigurasi umum (IP conflict, subnet salah,
+  gateway mismatch, dst)
+- Visualisasi topology dalam bentuk graph interaktif
+- Highlight node/edge yang error dengan detail penjelasan
+- (Tahap lanjut) Validasi routing protocol: OSPF, BGP, MPLS, VPLS
+
+
+1.3 NON-GOALS (di luar scope awal)
+------------------------------------------------------------
+- TIDAK melakukan emulasi packet forwarding real-time
+- TIDAK menjalankan VM/container router sungguhan (beda dengan
+  GNS3/EVE-NG/Packet Tracer)
+- TIDAK mendukung semua vendor (awal: RouterOS + Linux host config)
+- TIDAK ada user auth / multi-tenant di versi awal (single session,
+  stateless)
+
+
+1.4 TARGET USER
+------------------------------------------------------------
+- Mahasiswa jaringan/telekomunikasi yang sedang mengerjakan
+  tugas/lab konfigurasi (mis. WAN, MPLS, BGP)
+- Diri sendiri sebagai dogfooding tool untuk cek config TEKOMNET
+
+
+1.5 USER STORIES
+------------------------------------------------------------
+US-1: Sebagai user, saya bisa paste beberapa blok config (dipisah
+      komentar penanda device) ke satu textarea, lalu klik
+      "Validate" untuk memproses semuanya sekaligus.
+
+US-2: Sebagai user, saya bisa melihat hasil topology dalam bentuk
+      graph (node = device, edge = link antar device).
+
+US-3: Sebagai user, jika ada IP conflict atau subnet/gateway salah,
+      node/edge terkait berwarna merah, dan saya bisa klik untuk
+      lihat detail error-nya.
+
+US-4: Sebagai user, saya bisa export hasil report error dalam
+      bentuk teks/markdown untuk dilampirkan ke laporan tugas.
+
+US-5: (Lanjutan) Sebagai user, saya bisa menambahkan config
+      OSPF/BGP/MPLS dan sistem memvalidasi konsistensi antar
+      router (area, AS number, peer reachability, dll).
+
+
+1.6 FUNCTIONAL REQUIREMENTS
+------------------------------------------------------------
+FR-1   Sistem dapat menerima multiple block config dalam satu
+       input, dipisahkan oleh marker komentar (format:
+       "# N. NamaDevice" atau "# --- NamaDevice ---")
+
+FR-2   Sistem dapat mendeteksi tipe/vendor config secara otomatis:
+       - RouterOS (ditandai "/interface", "/ip address", dst)
+       - Linux host interfaces (ditandai "auto", "iface", dst)
+
+FR-3   Sistem mem-parsing setiap block menjadi struktur data
+       ternormalisasi (lihat ERD bagian 2)
+
+FR-4   Sistem membangun graph topology dengan mencocokkan subnet
+       antar interface dari device berbeda
+
+FR-5   Sistem menjalankan rule-based validation (lihat 1.6.1)
+
+FR-6   Sistem menampilkan hasil sebagai:
+       - Graph interaktif (pan/zoom, klik node/edge)
+       - Panel list error dengan severity (error/warning)
+       - Export report (txt/markdown)
+
+FR-7   (Fase 2) Sistem dapat parsing & validasi:
+       - OSPF (area, network statement)
+       - BGP (AS number, neighbor, peer IP)
+       - MPLS/LDP (label distribution consistency)
+       - VPLS (VPN ID matching antar PE)
+
+
+1.6.1 VALIDATION RULES (Detail)
+------------------------------------------------------------
+RULE-01 IP_CONFLICT
+        Dua interface (beda device) memiliki IP address yang
+        identik -> ERROR
+
+RULE-02 SUBNET_OVERPOPULATED
+        Satu subnet (umumnya /30 point-to-point) memiliki lebih
+        dari 2 IP terdaftar dari device berbeda -> ERROR
+
+RULE-03 SUBNET_UNDERPOPULATED
+        Satu subnet hanya memiliki 1 IP terdaftar (link belum
+        lengkap / device lawan belum dikonfig) -> WARNING
+
+RULE-04 GATEWAY_SUBNET_MISMATCH
+        Pada host config, gateway yang didefinisikan tidak berada
+        dalam subnet yang sama dengan address host -> ERROR
+
+RULE-05 GATEWAY_NOT_FOUND
+        Gateway IP pada host config tidak match dengan IP
+        interface router manapun pada subnet yang sama -> ERROR
+
+RULE-06 LOOPBACK_DUPLICATE
+        Dua atau lebih router memiliki loopback /32 address yang
+        sama -> ERROR
+
+RULE-07 SUBNET_OVERLAP
+        Dua subnet berbeda yang dideklarasikan saling overlap
+        (mis. /26 menumpuk dengan /30 di dalamnya secara tidak
+        sengaja) -> WARNING
+
+RULE-08 (Fase 2) OSPF_AREA_MISMATCH
+        Dua router yang terhubung satu link tapi area OSPF
+        interface-nya berbeda -> ERROR
+
+RULE-09 (Fase 2) BGP_PEER_UNREACHABLE
+        BGP neighbor IP yang didefinisikan tidak match dengan
+        IP/loopback device manapun di topology -> ERROR
+
+RULE-10 (Fase 2) MPLS_LDP_INCONSISTENT
+        Salah satu router di sepanjang path label-switching tidak
+        mengaktifkan LDP pada interface yang relevan -> ERROR
+
+RULE-11 (Fase 2) VPLS_VPN_ID_MISMATCH
+        Dua PE yang seharusnya membentuk VPLS pseudowire memiliki
+        VPN ID / VPLS ID yang berbeda -> ERROR
+
+
+1.7 NON-FUNCTIONAL REQUIREMENTS
+------------------------------------------------------------
+NFR-1  Stateless: tidak wajib ada database di versi awal, semua
+       proses dari input -> output dalam satu request
+NFR-2  Response time validasi < 2 detik untuk input s/d ~20 device
+NFR-3  Frontend responsive (desktop-first, tapi tetap usable di
+       layar kecil)
+NFR-4  Modular rule engine: tiap rule = 1 file/function, mudah
+       ditambah tanpa mengubah core
+NFR-5  Parser harus tetap berjalan (partial) walau ada syntax yang
+       tidak dikenali -> tampilkan sebagai "unparsed line" warning,
+       bukan crash total
+
+
+1.8 OUT-OF-SCOPE / FUTURE IDEAS
+------------------------------------------------------------
+- Real packet simulation (ICMP ping test antar node secara visual
+  step-by-step)
+- Import topology dari file .pkt (Packet Tracer) atau .gns3
+- Multi-user / save project ke akun
+- Auto-suggest fix (AI generate config correction)
+- Integrasi dengan project Cisco Packet Tracer MCP yang sudah ada
+  (validasi config sebelum di-push ke CHR VM)
+
+
+==================================================================
+2. ENTITY RELATIONSHIP DIAGRAM (ERD) - DATA MODEL
+==================================================================
+
+Catatan: versi awal STATELESS (tidak disimpan ke DB), tapi struktur
+data ini dipakai sebagai "in-memory model" / shape data antar layer
+(parser -> graph builder -> rule engine -> frontend). Jika nanti
+ditambah fitur "save project", struktur ini bisa langsung jadi
+schema DB (mis. MongoDB/Postgres JSONB).
+
+
+2.1 ENTITIES
+------------------------------------------------------------
+
+[PROJECT] (opsional, untuk fitur save di masa depan)
+  - id            : string (uuid)
+  - name          : string
+  - rawInput      : text
+  - createdAt     : datetime
+
+[DEVICE]
+  - id            : string (slug dari deviceName)
+  - name          : string            ex: "PE-2", "SNMP-Collector-IPB"
+  - vendorType    : enum [routeros, linux_host, unknown]
+  - rawConfig     : text               (block asli sebelum parsing)
+  - loopback      : string|null        ex: "10.10.13.5/32"
+  - parseWarnings : array<string>      (baris yg tidak terparsing)
+
+[INTERFACE]
+  - id            : string (uuid)
+  - deviceId      : FK -> DEVICE.id
+  - name          : string             ex: "ether1", "eth0", "lo"
+  - ip            : string             ex: "10.100.13.18"
+  - prefixLength  : integer            ex: 30
+  - networkAddr   : string (computed)  ex: "10.100.13.16"
+  - broadcastAddr : string (computed)  ex: "10.100.13.19"
+  - gateway       : string|null        (hanya ada di linux_host)
+  - role          : enum [wan, lan, loopback, unknown]
+
+[LINK] (EDGE - computed, bukan input langsung)
+  - id            : string (uuid)
+  - subnet        : string             ex: "10.100.13.16/30"
+  - interfaceAId  : FK -> INTERFACE.id
+  - interfaceBId  : FK -> INTERFACE.id | null  (null jika under-populated)
+  - status        : enum [valid, conflict, underpopulated,
+                           overpopulated]
+
+[VALIDATION_ERROR]
+  - id            : string (uuid)
+  - ruleCode      : string             ex: "RULE-01"
+  - severity      : enum [error, warning, info]
+  - message       : string             (human readable, ID/EN)
+  - relatedDeviceIds   : array<string>
+  - relatedInterfaceIds: array<string>
+  - relatedLinkId      : string|null
+
+[ROUTING_CONFIG] (Fase 2 - per device)
+  - id            : string (uuid)
+  - deviceId      : FK -> DEVICE.id
+  - protocol      : enum [ospf, bgp, mpls, vpls]
+  - rawSection    : text
+  - parsedData    : json
+       contoh untuk OSPF:
+         { areas: [{ network: "10.100.13.0/30", area: "0" }] }
+       contoh untuk BGP:
+         { asNumber: 77133, neighbors: [{ ip: "10.10.13.4",
+           remoteAs: 77133 }] }
+       contoh untuk VPLS:
+         { vplsId: "13:100", pwInterfaces: ["ether3"] }
+
+
+2.2 RELATIONSHIPS
+------------------------------------------------------------
+DEVICE        1 ---- N   INTERFACE       (satu device punya banyak interface)
+INTERFACE     1 ---- 0..1 LINK           (satu interface jadi salah satu
+                                           endpoint dari satu link)
+LINK          1 ---- 2   INTERFACE       (satu link menghubungkan 2 interface,
+                                           atau 1 jika underpopulated)
+DEVICE        1 ---- N   ROUTING_CONFIG  (satu device bisa punya beberapa
+                                           protocol routing)
+VALIDATION_ERROR  N ---- N  DEVICE/INTERFACE/LINK (error bisa
+                                           mereferensikan banyak entity)
+
+
+2.3 DIAGRAM (TEXT FORM)
+------------------------------------------------------------
+
+  PROJECT (optional)
+     |
+     | 1
+     |
+     | N
+  DEVICE ------------------------< ROUTING_CONFIG
+     |  1
+     |
+     | N
+  INTERFACE  -------- 0..1 -------- LINK -------- 0..1 -------- INTERFACE
+     |                                |
+     |                                |
+     +--------------------------------+
+                  |
+                  | referenced by
+                  v
+          VALIDATION_ERROR
+
+
+==================================================================
+3. SYSTEM ARCHITECTURE
+==================================================================
+
+3.1 HIGH LEVEL DIAGRAM (TEXT)
+------------------------------------------------------------
+
+  [Browser - React + Vite]
+        |
+        | POST /api/validate { rawConfig: string }
+        v
+  [Express API Server]
+        |
+        v
+  [Pipeline Modules] (jalan sequential, pure function tiap step)
+        |
+        |--> 1. splitter.js        (pisah per device block)
+        |--> 2. parsers/
+        |        - routeros.js
+        |        - linuxHost.js
+        |--> 3. graphBuilder.js    (cocokkan subnet -> edges)
+        |--> 4. rules/
+        |        - ipConflict.js
+        |        - subnetPopulation.js
+        |        - gatewayMatch.js
+        |        - loopbackUnique.js
+        |        - subnetOverlap.js
+        |        - (fase2) ospf.js, bgp.js, mpls.js, vpls.js
+        |--> 5. responseFormatter.js
+        v
+  [JSON Response]
+   {
+     devices: [...],
+     interfaces: [...],
+     links: [...],
+     errors: [...]
+   }
+        |
+        v
+  [Frontend Render]
+   - react-flow graph (nodes=devices, edges=links)
+   - error panel (list VALIDATION_ERROR, klik -> highlight di graph)
+   - export button (generate .md/.txt report dari errors[])
+
+
+3.2 FOLDER STRUCTURE (PROPOSED)
+------------------------------------------------------------
+
+netconfig-validator/
+├── server/
+│   ├── index.js                 (Express app entrypoint)
+│   ├── routes/
+│   │   └── validate.js          (POST /api/validate)
+│   ├── pipeline/
+│   │   ├── splitter.js
+│   │   ├── parsers/
+│   │   │   ├── routeros.js
+│   │   │   └── linuxHost.js
+│   │   ├── graphBuilder.js
+│   │   ├── rules/
+│   │   │   ├── index.js         (registry semua rule)
+│   │   │   ├── ipConflict.js
+│   │   │   ├── subnetPopulation.js
+│   │   │   ├── gatewayMatch.js
+│   │   │   ├── loopbackUnique.js
+│   │   │   └── subnetOverlap.js
+│   │   └── responseFormatter.js
+│   └── utils/
+│       └── cidr.js              (helper: network calc, overlap, dst)
+│
+├── client/
+│   ├── src/
+│   │   ├── main.jsx
+│   │   ├── App.jsx
+│   │   ├── components/
+│   │   │   ├── ConfigInput.jsx
+│   │   │   ├── TopologyGraph.jsx   (react-flow wrapper)
+│   │   │   ├── ErrorPanel.jsx
+│   │   │   └── ExportButton.jsx
+│   │   └── api/
+│   │       └── validate.js      (fetch ke /api/validate)
+│   └── index.html
+│
+└── PLANNING_NetSimValidator.txt  (dokumen ini)
+
+
+3.3 API CONTRACT
+------------------------------------------------------------
+
+POST /api/validate
+Request body:
+{
+  "rawConfig": "<semua text config, multi-block>"
+}
+
+Response body:
+{
+  "devices": [
+    {
+      "id": "pe-2",
+      "name": "PE-2",
+      "vendorType": "routeros",
+      "loopback": "10.10.13.5/32",
+      "interfaces": [
+        { "id": "...", "name": "ether2", "ip": "152.100.13.2",
+          "prefixLength": 30, "networkAddr": "152.100.13.0",
+          "role": "wan" }
+      ],
+      "parseWarnings": []
+    }
+  ],
+  "links": [
+    {
+      "id": "...",
+      "subnet": "152.100.13.0/30",
+      "interfaceAId": "...",
+      "interfaceBId": "...",
+      "status": "overpopulated"
+    }
+  ],
+  "errors": [
+    {
+      "id": "...",
+      "ruleCode": "RULE-02",
+      "severity": "error",
+      "message": "Subnet 152.100.13.0/30 digunakan oleh 3 interface
+                   (PE-2/ether2, PE-3/ether2, UI-Salemba/ether1).
+                   Seharusnya hanya 2 device per link point-to-point.",
+      "relatedDeviceIds": ["pe-2", "pe-3", "ui-salemba"],
+      "relatedInterfaceIds": ["...", "...", "..."],
+      "relatedLinkId": "..."
+    }
+  ]
+}
+
+
+3.4 TECH STACK SUMMARY
+------------------------------------------------------------
+- Frontend : React 18 + Vite, react-flow (topology), TailwindCSS
+- Backend  : Node.js (ESM) + Express
+- Parsing  : Custom regex-based parser (tanpa library eksternal
+             berat, biar ringan jalan di STB juga)
+- Testing  : Vitest/Jest, dengan fixture = config TEKOMNET asli
+- Deployment: Bisa jalan di STB existing (PM2 + Cloudflared),
+             port terpisah dari bot-wa
+
+
+==================================================================
+4. ROADMAP / FASE PENGERJAAN
+==================================================================
+
+FASE 1 - CORE (MVP)
+------------------------------------------------------------
+[ ] Setup project skeleton (server + client)
+[ ] utils/cidr.js -> network/broadcast calculation, subnet overlap check
+[ ] splitter.js -> pisah block per device dari marker komentar
+[ ] parsers/routeros.js
+[ ] parsers/linuxHost.js
+[ ] graphBuilder.js -> matching subnet antar interface
+[ ] rules: ipConflict, subnetPopulation (over/under), gatewayMatch,
+    loopbackUnique
+[ ] API endpoint /api/validate
+[ ] Frontend: ConfigInput + TopologyGraph (react-flow) + ErrorPanel
+[ ] Test pakai fixture config TEKOMNET (harus detect 3 bug yang
+    sudah ditemukan)
+
+FASE 2 - ROUTING PROTOCOL VALIDATION
+------------------------------------------------------------
+[ ] parsers tambahan: ospf, bgp, mpls, vpls section
+[ ] rules: ospfAreaMismatch, bgpPeerUnreachable, mplsLdpInconsistent,
+    vplsVpnIdMismatch
+[ ] Visualisasi tambahan: overlay badge protocol di tiap node/edge
+
+FASE 3 - POLISH & EXPORT
+------------------------------------------------------------
+[ ] Export report (markdown/txt)
+[ ] subnetOverlap rule (RULE-07)
+[ ] UI improvements (filter by severity, dark mode, dst)
+[ ] (opsional) Save project / share link
+
+FASE 4 - FUTURE / NICE TO HAVE
+------------------------------------------------------------
+[ ] Step-by-step ping simulation antar node
+[ ] Import dari .pkt / .gns3
+[ ] AI-assisted "suggest fix" untuk tiap error
+
+
+==================================================================
+5. ACCEPTANCE CRITERIA (MVP)
+==================================================================
+
+AC-1: Saat user paste config TEKOMNET (host + router), sistem
+      menghasilkan graph dengan jumlah node = jumlah device yang
+      terdeteksi (6 host + 11 router = 17 node)
+
+AC-2: Sistem mendeteksi RULE-02 (subnet overpopulated) untuk subnet
+      152.100.13.0/30 (PE-2 ether2, PE-3 ether2, UI-Salemba ether1,
+      UI-Depok ether1)
+
+AC-3: Sistem mendeteksi RULE-04 (gateway mismatch) untuk
+      SNMP-Collector-UI (address 152.100.13.130/26, gateway
+      172.16.13.129)
+
+AC-4: Klik pada error di ErrorPanel -> node/edge terkait di graph
+      ter-highlight (border merah / warna berbeda)
+
+AC-5: Tombol export menghasilkan file .txt/.md berisi summary semua
+      error dengan format yang readable
+
+
+==================================================================
+END OF DOCUMENT
+==================================================================
