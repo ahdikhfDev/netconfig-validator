@@ -10,6 +10,7 @@ export function buildGraph(devices) {
   for (const dev of devices) {
     for (const iface of dev.interfaces) {
       if (iface.name === 'lo' || iface.role === 'loopback') continue;
+      if (!iface.ip) continue; // skip interfaces without IP (eg. Linux bridge stanzas)
       const key = networkKey(iface.ip, iface.prefixLength);
       allIfaces.push({ ...iface, deviceId: dev.id, deviceName: dev.name, networkKey: key });
     }

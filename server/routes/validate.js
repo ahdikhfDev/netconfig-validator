@@ -27,7 +27,7 @@ validateRouter.post('/validate', (req, res) => {
       else parsed = { interfaces: [], parseWarnings: ['Unknown vendor type'] };
 
       return {
-        id: block.name.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
+        id: block.name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, ''),
         name: block.name,
         vendorType: vendor,
         rawConfig: block.text,
