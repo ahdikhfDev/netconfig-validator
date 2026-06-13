@@ -230,7 +230,93 @@ function NetEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targe
   );
 }
 
-const edgeTypes = { netEdge: NetEdge };
+// ─── Dangling Edge (underpopulated link stub) ────────
+// Renders a dashed stub extending from source node toward an unknown destination.
+// Shows subnet + "?" label so users know the link exists but has no peer device.
+function DanglingEdge({ id, sourceX, sourceY, sourcePosition, data = {}, markerEnd }) {
+  const STUB_LEN = 140;
+  const color = data?.color || '#f59e0b'; // amber = "unknown/warning"
+
+  // Extend stub to the RIGHT from the source edge point
+  const targetX = sourceX + STUB_LEN;
+  const targetY = sourceY;
+
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
+    sourceX, sourceY, sourcePosition,
+    targetX, targetY,
+    targetPosition: 'left',   // points back toward source
+    borderRadius: 10,
+  });
+
+  return (
+    <>
+      {/* Glow */}
+      <path d={edgePath} fill="none" stroke={color} strokeWidth={6}
+        strokeLinecap="round" opacity={0.1} style={{ pointerEvents: 'none' }} />
+      {/* Dashed stub line */}
+      <path
+        d={edgePath}
+        fill="none"
+        stroke={color}
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        strokeDasharray="7,5"
+        markerEnd={markerEnd}
+      />
+      {/* Subnet + "?" badge */}
+      {data?.subnet && (
+        <EdgeLabelRenderer>
+          <div style={{
+            position: 'absolute',
+            left: (sourceX + targetX) / 2,
+            top: labelY,
+            transform: 'translate(-50%, -50%)',
+            pointerEvents: 'none',
+            background: '#0f172a',
+            border: `1px dashed ${color}`,
+            borderRadius: 4,
+            padding: '2px 6px',
+            fontSize: 10,
+            color: '#94a3b8',
+            whiteSpace: 'nowrap',
+            fontFamily: 'monospace',
+            boxShadow: `0 0 8px ${color}33`,
+            zIndex: 10,
+          }}>
+            {data.subnet}
+          </div>
+        </EdgeLabelRenderer>
+      )}
+      {/* "?" label at end */}
+      <EdgeLabelRenderer>
+        <div style={{
+          position: 'absolute',
+          left: targetX,
+          top: targetY,
+          transform: 'translate(-50%, -50%)',
+          pointerEvents: 'none',
+          background: '#0f172a',
+          border: `1.5px dashed ${color}`,
+          borderRadius: 8,
+          width: 20,
+          height: 20,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 12,
+          fontWeight: 800,
+          color,
+          zIndex: 10,
+          boxShadow: `0 0 10px ${color}44`,
+        }}>
+          ?
+        </div>
+      </EdgeLabelRenderer>
+    </>
+  );
+}
+
+const edgeTypes = { netEdge: NetEdge, danglingEdge: DanglingEdge };
 
 // ─── Custom Node ─────────────────────────────────────
 function NetNode({ data }) {
@@ -455,37 +541,31 @@ export default function TopologyGraph({ devices, links, errors, selectedError })
     }));
   }, [devices, selectedDeviceIds, linkedIfacesByDevice]);
 
-  // Build React Flow edges
+  // Build React Flow edges — two groups:
+  //   full links    → netEdge (normal cables)
+  //   underpopulated → danglingEdge (dashed stubs with "?")
   const baseEdges = useMemo(() => {
-    return links
-      // Skip underpopulated links (no deviceBId) — avoid self-loop bugs
-      .filter((link) => link.deviceBId && link.interfaceBId)
-      .map((link, idx) => {
+    const fullLinks = links.filter((l) => l.deviceBId && l.interfaceBId);
+    const danglingLinks = links.filter((l) => !l.deviceBId || !l.interfaceBId);
+
+    const fullEdges = fullLinks.map((link, idx) => {
       const hasError = selectedLinkIds.has(link.id);
       const color = edgeColor(hasError, link, deviceProtocols, idx);
       const markerEnd = { type: MarkerType.ArrowClosed, color };
 
-      // Derive protocol label for edge badge
       let protoLabel = null;
       if (!hasError) {
         const srcP = deviceProtocols[link.deviceAId] || [];
         const dstP = deviceProtocols[link.deviceBId] || [];
         for (const p of srcP) {
-          if (dstP.includes(p) && PROTOCOL_COLORS[p]) {
-            protoLabel = p;
-            break;
-          }
+          if (dstP.includes(p) && PROTOCOL_COLORS[p]) { protoLabel = p; break; }
         }
       }
 
       const rawA = ifaceMap[`${link.deviceAId}/${link.interfaceAId}`];
       const ifaceA = rawA ? { name: rawA.name, ip: rawA.ip } : parseIfaceId(link.interfaceAId);
-
-      let ifaceB = { name: '?', ip: '' };
-      if (link.interfaceBId) {
-        const rawB = ifaceMap[`${link.deviceBId}/${link.interfaceBId}`];
-        ifaceB = rawB ? { name: rawB.name, ip: rawB.ip } : parseIfaceId(link.interfaceBId);
-      }
+      const rawB = ifaceMap[`${link.deviceBId}/${link.interfaceBId}`];
+      const ifaceB = rawB ? { name: rawB.name, ip: rawB.ip } : parseIfaceId(link.interfaceBId);
 
       return {
         id: link.id,
@@ -507,6 +587,28 @@ export default function TopologyGraph({ devices, links, errors, selectedError })
         },
       };
     });
+
+    // Dangling edges: underpopulated links — dashed stubs with "?" label
+    // Uses source==target in RF data model; DanglingEdge ignores target coords.
+    const danglingEdges = danglingLinks.map((link) => {
+      const markerEnd = { type: MarkerType.ArrowClosed, color: '#f59e0b' };
+      return {
+        id: link.id,
+        source: link.deviceAId,
+        target: link.deviceAId,
+        type: 'danglingEdge',
+        markerEnd,
+        style: { stroke: '#f59e0b', strokeWidth: 2 },
+        data: {
+          subnet: link.subnet,
+          color: '#f59e0b',
+          srcDevice: deviceNameMap[link.deviceAId] || link.deviceAId,
+          interfaceAId: link.interfaceAId,
+        },
+      };
+    });
+
+    return [...fullEdges, ...danglingEdges];
   }, [links, selectedLinkIds, ifaceMap, deviceProtocols, deviceNameMap]);
 
   // dagre layout — compute BEFORE initializing React Flow state
