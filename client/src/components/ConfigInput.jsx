@@ -1,63 +1,78 @@
 import { useState } from 'react';
 
-const PLACEHOLDER = `# 1. PE-2
-/ip address add address=152.100.13.2/30 interface=ether2
-/ip address add address=152.100.13.34/30 interface=ether3
+export default function ConfigInput({ onValidate }) {
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
-# 2. PE-3
-/ip address add address=152.100.13.2/30 interface=ether2
-/ip address add address=152.100.13.66/30 interface=ether3
-
-# 3. Host-A
-auto eth0
-iface eth0 inet static
-  address 192.168.1.2/24
-  gateway 192.168.1.1
-`;
-
-export default function ConfigInput({ onValidate, loading }) {
-  const [text, setText] = useState('');
-
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!text.trim()) return;
-    onValidate(text);
+    if (!input.trim()) return;
+    setLoading(true);
+    try {
+      await onValidate(input);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLoadExample = () => {
+    setInput(
+`# MikroTik config
+/interface bridge add name=loopback protocol-mode=none
+/ip address add address=192.168.1.1/24 interface=loopback`
+    );
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Config Input</h2>
-        <span className="text-xs text-slate-600">{text.length} chars</span>
-      </div>
-
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder={PLACEHOLDER}
-        className="flex-1 p-4 bg-slate-950 text-slate-200 text-sm font-mono resize-none outline-none placeholder:text-slate-700"
-        spellCheck={false}
-      />
-
-      <div className="p-3 border-t border-slate-800">
+    <div className="flex flex-col h-full">
+      {/* Header with collapse toggle */}
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-700/60 shrink-0 bg-slate-800/40">
+        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Config Input</span>
         <button
-          type="submit"
-          disabled={loading || !text.trim()}
-          className="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-sm font-semibold transition-colors"
+          onClick={() => setCollapsed(c => !c)}
+          className="text-slate-500 hover:text-slate-200 transition-colors p-1 rounded"
+          title={collapsed ? 'Expand' : 'Collapse'}
         >
-          {loading ? (
-            <span className="flex items-center justify-center gap-2">
-              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              Validating...
-            </span>
+          {collapsed ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
           ) : (
-            'Validate Config'
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="18 15 12 9 6 15" />
+            </svg>
           )}
         </button>
       </div>
-    </form>
+
+      {!collapsed && (
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={`Paste MikroTik config here...\n\nOr click "Load Example" to try with sample config.`}
+            className="flex-1 min-h-0 resize-none bg-slate-900 text-slate-200 text-xs font-mono p-3 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500/50"
+            spellCheck={false}
+          />
+          <div className="flex gap-2 p-2 border-t border-slate-700/60 shrink-0">
+            <button
+              type="button"
+              onClick={handleLoadExample}
+              className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-100 border border-slate-600 hover:border-slate-500 rounded transition-colors"
+            >
+              Load Example
+            </button>
+            <button
+              type="submit"
+              disabled={loading || !input.trim()}
+              className="flex-1 py-1.5 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 disabled:bg-slate-700 disabled:text-slate-500 rounded transition-colors"
+            >
+              {loading ? 'Parsing…' : 'Validate & Visualize'}
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
   );
 }

@@ -5,7 +5,7 @@
 
 import { ipConflictRule } from './ipConflict.js';
 import { subnetPopulationRule } from './subnetPopulation.js';
-import { gatewayMatchRule } from './gatewayMatch.js';
+import { gatewaySubnetRule, gatewayReachabilityRule } from './gatewayMatch.js';
 import { loopbackUniqueRule } from './loopbackUnique.js';
 import { subnetOverlapRule } from './subnetOverlap.js';
 import { ospfAreaMismatchRule } from './ospfAreaMismatch.js';
@@ -14,16 +14,20 @@ import { mplsLdpInconsistentRule } from './mplsLdpInconsistent.js';
 import { vplsVpnIdMismatchRule } from './vplsVpnIdMismatch.js';
 
 const RULES = [
-  // Phase 1: Core
+  // Phase 1: Core topology
   { code: 'RULE-01', fn: ipConflictRule, weight: 10 },
   { code: 'RULE-02', fn: subnetPopulationRule, weight: 9 },
   // RULE-03 underpopulated handled inside subnetPopulationRule
-  { code: 'RULE-04', fn: gatewayMatchRule, weight: 7 },
-  { code: 'RULE-05', fn: gatewayMatchRule, weight: 7 },
+
+  // Phase 2: Gateway validation
+  { code: 'RULE-04', fn: gatewaySubnetRule, weight: 7 },
+  { code: 'RULE-05', fn: gatewayReachabilityRule, weight: 7 },
+
+  // Phase 3: Addressing
   { code: 'RULE-06', fn: loopbackUniqueRule, weight: 6 },
   { code: 'RULE-07', fn: subnetOverlapRule, weight: 8 },
 
-  // Phase 2: Routing protocols
+  // Phase 4: Routing protocols
   { code: 'RULE-08', fn: ospfAreaMismatchRule, weight: 8 },
   { code: 'RULE-09', fn: bgpPeerUnreachableRule, weight: 9 },
   { code: 'RULE-10', fn: mplsLdpInconsistentRule, weight: 6 },

@@ -13,7 +13,7 @@ export function loopbackUniqueRule(devices, _links) {
     }
     // Also check interfaces named 'lo'
     for (const iface of dev.interfaces) {
-      if (iface.name === 'lo' || iface.id === 'lo') {
+      if ((iface.name === 'lo' || iface.id === 'lo') && iface.ip) {
         if (!loMap[iface.ip]) loMap[iface.ip] = [];
         loMap[iface.ip].push(dev.name);
       }

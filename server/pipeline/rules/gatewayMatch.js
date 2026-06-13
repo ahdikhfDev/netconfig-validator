@@ -1,25 +1,21 @@
 /**
- * gatewayMatch.js — RULE-04 (gateway not in same subnet) & RULE-05 (gateway not found).
+ * gatewayMatch.js — Split into RULE-04 and RULE-05.
+ * RULE-04: gateway not in same subnet as interface IP
+ * RULE-05: gateway IP not found on any device interface
  */
 
 import { ipToInt } from '../../utils/cidr.js';
 
-export function gatewayMatchRule(devices, _links) {
+/**
+ * RULE-04: Check that every interface with a gateway has it in the same subnet.
+ */
+export function gatewaySubnetRule(devices, _links) {
   const errors = [];
-
-  // Collect all IPs from all devices for RULE-05 lookup
-  const allIPs = new Map(); // ip -> { deviceId, deviceName }
-  for (const dev of devices) {
-    for (const iface of dev.interfaces) {
-      if (iface.ip) allIPs.set(iface.ip, { deviceId: dev.id, deviceName: dev.name });
-    }
-  }
 
   for (const dev of devices) {
     for (const iface of dev.interfaces) {
       if (!iface.gateway || !iface.ip || !iface.prefixLength) continue;
 
-      // RULE-04: Gateway in same subnet?
       const gwInt = ipToInt(iface.gateway);
       const ifaceInt = ipToInt(iface.ip);
       const mask = ~(2 ** (32 - iface.prefixLength) - 1) >>> 0;
@@ -36,10 +32,31 @@ export function gatewayMatchRule(devices, _links) {
           relatedInterfaceIds: [iface.id],
           relatedLinkId: null,
         });
-        continue;
       }
+    }
+  }
 
-      // RULE-05: Gateway IP exists on any device?
+  return errors;
+}
+
+/**
+ * RULE-05: Check that every gateway IP exists on some device's interface.
+ */
+export function gatewayReachabilityRule(devices, _links) {
+  const errors = [];
+
+  // Collect all IPs from all devices
+  const allIPs = new Set();
+  for (const dev of devices) {
+    for (const iface of dev.interfaces) {
+      if (iface.ip) allIPs.add(iface.ip);
+    }
+  }
+
+  for (const dev of devices) {
+    for (const iface of dev.interfaces) {
+      if (!iface.gateway) continue;
+
       if (!allIPs.has(iface.gateway)) {
         errors.push({
           id: `err-gwnotfound-${iface.id}`,

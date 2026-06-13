@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { runPipeline } from '../pipeline/splitter.js';
-import { parseRouterOS } from '../pipeline/parsers/routeros.js';
-import { parseLinuxHost } from '../pipeline/parsers/linuxHost.js';
+import { parseConfig, detectVendor } from '../pipeline/parsers/index.js';
 import { buildGraph } from '../pipeline/graphBuilder.js';
 import { runAllRules } from '../pipeline/rules/index.js';
 import { formatResponse } from '../pipeline/responseFormatter.js';
@@ -18,18 +17,18 @@ validateRouter.post('/validate', (req, res) => {
     // 1. Split per device block
     const blocks = runPipeline(rawConfig);
 
-    // 2. Parse each block
+    // 2. Parse each block via vendor-abstracted parser registry
     const devices = blocks.map((block) => {
-      const vendor = detectVendor(block.text);
-      let parsed;
-      if (vendor === 'routeros') parsed = parseRouterOS(block.text);
-      else if (vendor === 'linux_host') parsed = parseLinuxHost(block.text);
-      else parsed = { interfaces: [], parseWarnings: ['Unknown vendor type'] };
+      const parsed = parseConfig(block.text);
 
       return {
-        id: block.name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, ''),
+        id: block.name
+          .toLowerCase()
+          .replace(/[^a-z0-9-]/g, '-')
+          .replace(/-+/g, '-')
+          .replace(/^-|-$/g, ''),
         name: block.name,
-        vendorType: vendor,
+        vendorType: detectVendor(block.text),
         rawConfig: block.text,
         interfaces: parsed.interfaces || [],
         parseWarnings: parsed.parseWarnings || [],
@@ -42,7 +41,7 @@ validateRouter.post('/validate', (req, res) => {
     // 3. Build topology graph
     const links = buildGraph(devices);
 
-    // 4. Run validation rules (Phase 1 + Phase 2 routing rules)
+    // 4. Run validation rules
     const errors = runAllRules(devices, links);
 
     // 5. Format response
@@ -54,8 +53,9 @@ validateRouter.post('/validate', (req, res) => {
   }
 });
 
-function detectVendor(text) {
-  if (/^\/interface\b|^\/ip\b|^\/routing\b|^\/mpls\b|^\/system\b/m.test(text)) return 'routeros';
-  if (/^auto\s|^iface\s|^source\s/m.test(text)) return 'linux_host';
-  return 'unknown';
-}
+// Legacy export for backward compatibility
+validateRouter.post('/detect-vendor', (req, res) => {
+  const { text } = req.body;
+  if (!text) return res.status(400).json({ error: 'text required' });
+  res.json({ vendor: detectVendor(text) });
+});
