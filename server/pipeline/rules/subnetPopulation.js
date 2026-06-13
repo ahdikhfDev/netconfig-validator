@@ -1,5 +1,8 @@
 /**
  * subnetPopulation.js — RULE-02 (overpopulated) & RULE-03 (underpopulated).
+ *
+ * Overpopulated is only meaningful for P2P subnets (/30+).
+ * Broadcast subnets (LAN /29 or larger) can have any number of hosts.
  */
 
 export function subnetPopulationRule(devices, links) {
@@ -10,8 +13,10 @@ export function subnetPopulationRule(devices, links) {
     if (seen.has(link.subnet)) continue;
     seen.add(link.subnet);
 
+    // Skip overpopulated for broadcast links — many hosts on a LAN is normal
     if (link.status === 'overpopulated') {
-      // Collect all devices on this subnet
+      if (link.linkType === 'broadcast') continue;
+
       const devs = [];
       for (const l of links) {
         if (l.subnet === link.subnet) {

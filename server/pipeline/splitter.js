@@ -58,5 +58,11 @@ function parseMarker(line) {
   const m4 = trim.match(/^#\s+([A-Z]{2,}(?:\s+[A-Z]{2,}){1,3})$/);
   if (m4) return m4[1].trim();
 
+  // "# Name" or "# Name-With-Hyphens" — generic device header fallback
+  // catched "Router-A", "R1-Gateway", "Switch-Core", "Core-Switch-01"
+  // Excludes common comment patterns (contains lowercase, no colon/question)
+  const m5 = trim.match(/^#\s+([A-Za-z][A-Za-z0-9_-]+)$/);
+  if (m5) return m5[1].trim();
+
   return null;
 }

@@ -107,6 +107,8 @@ export function parseLinuxHost(text) {
     interfaces,
     parseWarnings: warnings,
     loopback: null,
+    routing: { ospf: null, bgp: null, mpls: null, vpls: null, staticRoutes: [] },
+    protocols: [],
   };
 }
 
